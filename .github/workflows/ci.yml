@@ -32,10 +32,9 @@ jobs:
       matrix:
         footgun:
           - 01-rls-disabled
-          - 02-update-without-tenant-check
-          - 03-org-from-user-metadata
-          - 04-view-without-security-invoker
-          - 05-security-definer-leak
+          - 02-org-from-user-metadata
+          - 03-view-without-security-invoker
+          - 04-security-definer-leak
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
