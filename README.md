@@ -89,6 +89,11 @@ A note on 02, because it is the subtle one: Postgres reuses `USING` as the
 `WITH CHECK` when you omit it, so the naive "forgot WITH CHECK" is actually
 safe. The version that ships to production is a check that validates the
 wrong thing — "the row is still mine" — while `org_id` quietly changes.
+And the test has to attack **without** `RETURNING`: when the client asks for
+the row back (`Prefer: return=representation`), the new row must also pass a
+SELECT policy, which aborts the transaction and masks the broken UPDATE
+policy. A client that fires the update and never asks for the row back
+smuggles successfully. This suite learned that from its own footgun run.
 
 ## CI
 

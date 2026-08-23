@@ -90,14 +90,17 @@ describe('tenant isolation', () => {
   });
 
   it('update: alice cannot move her project into org B (WITH CHECK)', async () => {
-    const { data, error } = await alice.client
+    // Deliberately NO .select() here. With `Prefer: return=representation`,
+    // the RETURNING clause requires the NEW row to be visible through a
+    // SELECT policy too -- that aborts the transaction with 42501 even when
+    // the UPDATE policy itself is broken, and masks the hole. The real
+    // attacker does not ask for the row back; neither does this test.
+    const { error } = await alice.client
       .from('projects')
       .update({ org_id: orgB })
-      .eq('id', projectA)
-      .select();
+      .eq('id', projectA);
     expect(error).not.toBeNull();
     expect(error!.code).toBe('42501');
-    expect(data).toBeNull();
     const { data: check } = await admin.from('projects').select('org_id').eq('id', projectA).single();
     expect(check!.org_id).toBe(orgA);
     // Repair in case a footgun let the move through, so later tests stay meaningful.
