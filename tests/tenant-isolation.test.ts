@@ -90,21 +90,35 @@ describe('tenant isolation', () => {
   });
 
   it('update: alice cannot move her project into org B (WITH CHECK)', async () => {
-    // Deliberately NO .select() here. With `Prefer: return=representation`,
-    // the RETURNING clause requires the NEW row to be visible through a
-    // SELECT policy too -- that aborts the transaction with 42501 even when
-    // the UPDATE policy itself is broken, and masks the hole. The real
-    // attacker does not ask for the row back; neither does this test.
-    const { error } = await alice.client
-      .from('projects')
-      .update({ org_id: orgB })
-      .eq('id', projectA);
-    expect(error).not.toBeNull();
-    expect(error!.code).toBe('42501');
-    const { data: check } = await admin.from('projects').select('org_id').eq('id', projectA).single();
-    expect(check!.org_id).toBe(orgA);
-    // Repair in case a footgun let the move through, so later tests stay meaningful.
-    await admin.from('projects').update({ org_id: orgA }).eq('id', projectA);
+    try {
+      // Prong 1 -- plain PATCH. Note: this path is DOUBLY guarded. Even with a
+      // broken WITH CHECK, PostgREST's internal RETURNING requires the new row
+      // to be visible through a SELECT policy, which aborts a cross-tenant
+      // move anyway. Passing here proves little on its own...
+      const { error } = await alice.client
+        .from('projects')
+        .update({ org_id: orgB })
+        .eq('id', projectA);
+      expect(error).not.toBeNull();
+      expect(error!.code).toBe('42501');
+
+      // Prong 2 -- the same move through a SECURITY INVOKER RPC that writes.
+      // Inside a function body there is no RETURNING quirk to save you:
+      // the UPDATE policy's WITH CHECK is the only wall. This is the prong
+      // that goes red when that check validates the wrong thing.
+      const { error: rpcError } = await alice.client.rpc('move_project', {
+        p_project_id: projectA,
+        p_org_id: orgB,
+      });
+      expect(rpcError).not.toBeNull();
+      expect(rpcError!.code).toBe('42501');
+
+      const { data: check } = await admin.from('projects').select('org_id').eq('id', projectA).single();
+      expect(check!.org_id).toBe(orgA);
+    } finally {
+      // Repair in case a footgun let the move through, so later tests stay meaningful.
+      await admin.from('projects').update({ org_id: orgA }).eq('id', projectA);
+    }
   });
 
   it("delete: alice cannot delete bob's project", async () => {

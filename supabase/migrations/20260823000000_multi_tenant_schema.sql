@@ -105,6 +105,21 @@ as $$
   select * from public.projects where org_id = p_org_id;
 $$;
 
+-- A WRITING invoker RPC, on purpose. It does no access check of its own and
+-- relies entirely on the UPDATE policy's WITH CHECK. That reliance is exactly
+-- what the suite has to prove: PostgREST's own RETURNING behavior happens to
+-- abort a cross-tenant move on a plain PATCH (the new row must be visible
+-- through a SELECT policy), but nothing protects a write made INSIDE a
+-- function body -- there, WITH CHECK is the only wall.
+create or replace function public.move_project(p_project_id uuid, p_org_id uuid)
+returns void
+language sql
+security invoker
+set search_path = ''
+as $$
+  update public.projects set org_id = p_org_id where id = p_project_id;
+$$;
+
 -- Explicit API-role grants. Hosted Supabase usually hands these out via
 -- default privileges; this repo grants them explicitly so nothing depends on
 -- which role happened to run the migration. Grants only make relations
