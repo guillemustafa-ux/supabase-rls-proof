@@ -7,3 +7,7 @@ create view public.project_overview as
   select p.id, p.name, p.org_id, o.name as org_name, p.created_at
   from public.projects p
   join public.organizations o on o.id = p.org_id;
+
+-- The recreated view gets the same grants the original had (on hosted
+-- Supabase, default privileges would do this silently).
+grant select on public.project_overview to anon, authenticated, service_role;

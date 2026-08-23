@@ -104,3 +104,13 @@ set search_path = ''
 as $$
   select * from public.projects where org_id = p_org_id;
 $$;
+
+-- Explicit API-role grants. Hosted Supabase usually hands these out via
+-- default privileges; this repo grants them explicitly so nothing depends on
+-- which role happened to run the migration. Grants only make relations
+-- ADDRESSABLE through the API -- RLS decides which rows come back.
+grant usage on schema public to anon, authenticated, service_role;
+grant all on all tables in schema public to service_role;
+grant select on all tables in schema public to anon;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant execute on all functions in schema public to anon, authenticated, service_role;

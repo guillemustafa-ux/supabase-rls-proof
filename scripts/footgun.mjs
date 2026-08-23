@@ -46,8 +46,12 @@ rmSync(reportFile);
 
 const failed = [];
 for (const file of report.testResults ?? []) {
-  for (const test of file.assertionResults ?? []) {
-    if (test.status === 'failed') failed.push(test.fullName ?? test.title);
+  const assertionFailures = (file.assertionResults ?? []).filter((t) => t.status === 'failed');
+  for (const test of assertionFailures) failed.push(test.fullName ?? test.title);
+  if (file.status === 'failed' && assertionFailures.length === 0) {
+    // e.g. a beforeAll crash: the file fails without any named test failing
+    failed.push(`${file.name} (suite-level failure: ${String(file.message ?? 'unknown').split('
+')[0]})`);
   }
 }
 
