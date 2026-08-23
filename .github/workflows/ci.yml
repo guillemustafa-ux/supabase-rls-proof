@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suite-green:
+    name: "baseline: suite must pass"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Start Supabase (db + auth + rest)
+        run: npx supabase start
+      - run: npm test
+
+  # The suite is only trustworthy if it BITES. Each footgun re-introduces a
+  # real audit finding on top of the baseline; the runner exits 0 only when
+  # every test documented for that footgun actually fails.
+  footgun-must-be-caught:
+    name: "footgun ${{ matrix.footgun }}: suite must fail"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        footgun:
+          - 01-rls-disabled
+          - 02-update-without-tenant-check
+          - 03-org-from-user-metadata
+          - 04-view-without-security-invoker
+          - 05-security-definer-leak
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Start Supabase (db + auth + rest)
+        run: npx supabase start
+      - run: npm run footgun -- ${{ matrix.footgun }}

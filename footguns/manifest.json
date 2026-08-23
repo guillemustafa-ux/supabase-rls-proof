@@ -1,0 +1,36 @@
+{
+  "01-rls-disabled": {
+    "description": "RLS disabled on public.projects (the classic \"we'll enable it later\")",
+    "expectedFailures": [
+      "select: alice sees org A's projects and nothing from org B",
+      "anon: the anon key reads zero rows from every table and view",
+      "every table in public has RLS enabled"
+    ]
+  },
+  "02-update-without-tenant-check": {
+    "description": "UPDATE policy checks ownership but not the tenant column",
+    "expectedFailures": [
+      "update: alice cannot move her project into org B"
+    ]
+  },
+  "03-org-from-user-metadata": {
+    "description": "SELECT policy trusts org_id from user-editable user_metadata",
+    "expectedFailures": [
+      "user_metadata: forging org_id = org B in her own metadata grants alice nothing"
+    ]
+  },
+  "04-view-without-security-invoker": {
+    "description": "View recreated without security_invoker (runs as owner, bypasses RLS)",
+    "expectedFailures": [
+      "view: project_overview only returns the caller's tenant",
+      "every view in public is security_invoker"
+    ]
+  },
+  "05-security-definer-leak": {
+    "description": "RPC flipped to SECURITY DEFINER: no access check, no pinned search_path",
+    "expectedFailures": [
+      "rpc: get_org_projects(org B) returns nothing for alice",
+      "every SECURITY DEFINER function in public pins search_path"
+    ]
+  }
+}
