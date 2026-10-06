@@ -1,4 +1,4 @@
--- FOOTGUN 03 -- trusting user_metadata
+-- FOOTGUN 02 -- trusting user_metadata
 -- user_metadata is writable by the END USER via supabase.auth.updateUser().
 -- A policy that reads the org from it (say, to support a "current org"
 -- switcher) lets any user grant themselves access to any org by editing

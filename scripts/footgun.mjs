@@ -72,7 +72,7 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-console.log(`\nCAUGHT: ${name} makes the suite fail exactly where the README says it will.`);
+console.log(`\nCAUGHT: ${name} makes every test the README documents for it fail.`);
 
 async function applySql(file) {
   const sql = readFileSync(file, 'utf8');

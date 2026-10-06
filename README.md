@@ -114,8 +114,8 @@ Two jobs, and both have to hold:
 - **`baseline: suite must pass`** — spins up the Supabase stack in the
   runner and runs the 16 tests.
 - **`footgun NN: suite must fail`** — a 4-way matrix. Each leg applies one
-  footgun and fails the build if the suite *stays green* or fails anywhere
-  other than the documented tests.
+  footgun and fails the build if the suite *stays green* or if any of the
+  documented tests still passes.
 
 The second job is the point of the repo: it is the difference between "my
 tests pass" and "my tests have been shown to catch the bugs they claim to

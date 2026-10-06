@@ -1,4 +1,4 @@
--- FOOTGUN 04 -- view without security_invoker
+-- FOOTGUN 03 -- view without security_invoker
 -- Views default to running as their OWNER. On Supabase the owner is postgres,
 -- which bypasses RLS -- so the view happily returns every tenant's rows to
 -- anyone allowed to select from it, including the anon role.
