@@ -5,7 +5,7 @@
 This repo is a multi-tenant Supabase schema with hand-written Row Level
 Security, a test suite that exercises it with **real authenticated user
 tokens** (not the anon key), and — the part that matters — a catalog of four
-**footguns**: migrations that deliberately re-introduce real-world audit
+**footguns**: SQL scripts that deliberately re-introduce real-world audit
 findings. Apply any of them and the suite must fail, on the exact test the
 README says it will. CI enforces both directions: baseline green, every
 footgun red. A fifth finding lives in `footguns/case-study/` — a broken
