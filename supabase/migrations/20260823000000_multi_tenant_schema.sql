@@ -111,10 +111,13 @@ $$;
 -- apply: the UPDATE policy's WITH CHECK and, because the WHERE clause reads a
 -- column of projects, the SELECT policy, which Postgres also checks against
 -- the NEW row (CREATE POLICY docs, "Policies Applied by Command Type"). Either
--- one aborts the move with 42501, which is why the case study in
--- footguns/case-study/ leaves the suite green. An UPDATE whose WHERE, SET and
--- RETURNING reference none of the table's own columns gets no SELECT check;
--- there, WITH CHECK is the only wall.
+-- one aborts the move with 42501, which is why footgun 05 (an ownership-only
+-- WITH CHECK) does not break the two filtered move paths in the suite. An
+-- UPDATE whose WHERE, SET and RETURNING reference none of the table's own
+-- columns gets no SELECT check; there, WITH CHECK is the only wall. Through
+-- the API, the one request PostgREST builds with that shape -- a PATCH with
+-- no filters -- is refused by pg-safeupdate first (no WHERE); the suite runs
+-- the statement in SQL as authenticated to prove the wall holds.
 create or replace function public.move_project(p_project_id uuid, p_org_id uuid)
 returns void
 language sql

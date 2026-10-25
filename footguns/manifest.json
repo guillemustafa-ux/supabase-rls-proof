@@ -26,5 +26,11 @@
       "rpc: get_org_projects(org B) returns nothing for alice",
       "every SECURITY DEFINER function in public pins search_path"
     ]
+  },
+  "05-update-ownership-only-check": {
+    "description": "UPDATE policy whose WITH CHECK validates ownership, not the tenant column: an UPDATE that reads no column moves a row into another org",
+    "expectedFailures": [
+      "update: an UPDATE that reads no column cannot move alice's project into org B (WITH CHECK is the only wall)"
+    ]
   }
 }
