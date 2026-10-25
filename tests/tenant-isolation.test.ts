@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import pg from 'pg';
 import {
   addMember,
   admin,
@@ -89,7 +90,7 @@ describe('tenant isolation', () => {
     expect(check!.name).toBe('Borealis');
   });
 
-  it('update: alice cannot move her project into org B (WITH CHECK)', async () => {
+  it('update: alice cannot move her project into org B through a filtered UPDATE (PATCH and RPC)', async () => {
     try {
       // Prong 1 -- plain PATCH. This path is DOUBLY guarded: the UPDATE's WHERE
       // reads projects.id, so Postgres also checks the new row against the
@@ -104,8 +105,8 @@ describe('tenant isolation', () => {
 
       // Prong 2 -- the same move through a SECURITY INVOKER RPC that writes.
       // Its UPDATE also filters on id, so the same SELECT check applies.
-      // Neither prong isolates WITH CHECK, which is why the ownership-only
-      // policy in footguns/case-study/ leaves this test green.
+      // Neither prong isolates WITH CHECK; the next test does, which is why
+      // footgun 05 (an ownership-only WITH CHECK) leaves this one green.
       const { error: rpcError } = await alice.client.rpc('move_project', {
         p_project_id: projectA,
         p_org_id: orgB,
@@ -118,6 +119,45 @@ describe('tenant isolation', () => {
     } finally {
       // Repair in case a footgun let the move through, so later tests stay meaningful.
       await admin.from('projects').update({ org_id: orgA }).eq('id', projectA);
+    }
+  });
+
+  it("update: an UPDATE that reads no column cannot move alice's project into org B (WITH CHECK is the only wall)", async () => {
+    // Through the API, the one request with this shape -- a PATCH with no
+    // filters -- never reaches the policy: Supabase's Postgres image loads
+    // pg-safeupdate for the authenticator role, so it is refused with 21000
+    // ("UPDATE requires a WHERE clause") first. So the statement runs in SQL
+    // as `authenticated` with alice's claims. No WHERE, no RETURNING, nothing
+    // on the right of SET reads projects, so Postgres applies no SELECT check
+    // to the new row: USING narrows it to alice's rows and WITH CHECK alone
+    // decides. This is the shape footgun 05 opens, and the test that catches
+    // it. Rolled back either way.
+    const db = new pg.Client({ connectionString: env.dbUrl });
+    try {
+      await db.connect();
+      await db.query('begin');
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claims', $1, true), set_config('request.jwt.claim.sub', $2, true)", [
+        JSON.stringify({ sub: alice.id, role: 'authenticated' }),
+        alice.id,
+      ]);
+      // Precondition that keeps footgun 05 detectable: the rows alice can see
+      // (the SELECT policy uses the same is_org_member(org_id) predicate as the
+      // UPDATE policy's USING) are exactly her own, so an ownership-only WITH
+      // CHECK would let every one of them through.
+      const { rows: visible } = await db.query('select id, created_by from public.projects order by id');
+      expect(visible, 'precondition: alice must see exactly her own project').toEqual([
+        { id: projectA, created_by: alice.id },
+      ]);
+      const errorCode = await db.query('update public.projects set org_id = $1', [orgB]).then(
+        () => null,
+        (e: { code?: string }) => e.code,
+      );
+      expect(errorCode, 'policy leak: the no-column UPDATE was not refused').toBe('42501');
+    } finally {
+      // Roll back no matter what, without hiding the assertion that failed.
+      await db.query('rollback').catch(() => undefined);
+      await db.end().catch(() => undefined);
     }
   });
 

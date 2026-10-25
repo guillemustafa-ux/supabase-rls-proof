@@ -35,6 +35,7 @@ jobs:
           - 02-org-from-user-metadata
           - 03-view-without-security-invoker
           - 04-security-definer-leak
+          - 05-update-ownership-only-check
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
