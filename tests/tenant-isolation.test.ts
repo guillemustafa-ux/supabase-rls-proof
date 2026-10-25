@@ -91,10 +91,10 @@ describe('tenant isolation', () => {
 
   it('update: alice cannot move her project into org B (WITH CHECK)', async () => {
     try {
-      // Prong 1 -- plain PATCH. Note: this path is DOUBLY guarded. Even with a
-      // broken WITH CHECK, PostgREST's internal RETURNING requires the new row
-      // to be visible through a SELECT policy, which aborts a cross-tenant
-      // move anyway. Passing here proves little on its own...
+      // Prong 1 -- plain PATCH. This path is DOUBLY guarded: the UPDATE's WHERE
+      // reads projects.id, so Postgres also checks the new row against the
+      // SELECT policy, which aborts a cross-tenant move even with a broken
+      // WITH CHECK. Passing proves the move is blocked, not which layer did it.
       const { error } = await alice.client
         .from('projects')
         .update({ org_id: orgB })
@@ -103,9 +103,9 @@ describe('tenant isolation', () => {
       expect(error!.code).toBe('42501');
 
       // Prong 2 -- the same move through a SECURITY INVOKER RPC that writes.
-      // Inside a function body there is no RETURNING quirk to save you:
-      // the UPDATE policy's WITH CHECK is the only wall. This is the prong
-      // that goes red when that check validates the wrong thing.
+      // Its UPDATE also filters on id, so the same SELECT check applies.
+      // Neither prong isolates WITH CHECK, which is why the ownership-only
+      // policy in footguns/case-study/ leaves this test green.
       const { error: rpcError } = await alice.client.rpc('move_project', {
         p_project_id: projectA,
         p_org_id: orgB,

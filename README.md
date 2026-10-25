@@ -9,8 +9,8 @@ tokens** (not the anon key), and — the part that matters — a catalog of four
 findings. Apply any of them and the suite must fail, on the exact test the
 README says it will. CI enforces both directions: baseline green, every
 footgun red. A fifth finding lives in `footguns/case-study/` — a broken
-policy that the suite proves is *not* enough to leak data, because tenant
-identity is enforced in more than one place.
+policy that did *not* leak data through the two move paths the suite exercises,
+because tenant identity is enforced in more than one place.
 
 ```
 npx supabase start   # local stack (Docker)
@@ -86,26 +86,33 @@ baseline is restored afterwards.
 | `03-view-without-security-invoker` | View recreated without `security_invoker` — runs as owner, bypasses RLS | #12, #15 |
 | `04-security-definer-leak` | RPC flipped to `SECURITY DEFINER` "to fix a permissions error": no access check, no pinned `search_path` | #13, #16 |
 
-### Case study: a broken policy that *didn't* open a hole
+### Case study: a broken policy that *didn't* open a hole here
 
 `footguns/case-study/update-cross-tenant-defense-in-depth.sql` re-creates a
 genuinely broken UPDATE policy — it validates *ownership* ("the row is still
-mine") instead of the *tenant column*, so on paper a member could move a row
-into another org. It lives outside the matrix on purpose: with it applied,
-the suite **stays green**, because the move is stopped by a second layer the
-broken policy never touches.
+mine") instead of the *tenant column*, so a member could move a row into
+another org. It lives outside the matrix on purpose: with it applied, the
+suite **stays green**, because the moves it tests are stopped by a second
+layer the broken policy never touches.
 
-- A PATCH through PostgREST is blocked by the internal `RETURNING`: the new
-  row must pass a SELECT policy, and `is_org_member(orgB)` is false for the
-  attacker, so it aborts with `42501` regardless of `WITH CHECK`.
-- A `SECURITY INVOKER` RPC that writes inside its body (`move_project`) is
-  still blocked in practice on this stack.
+- Both paths run an UPDATE that filters on `projects.id`: the PATCH through
+  PostgREST and the `SECURITY INVOKER` RPC `move_project`. When an UPDATE
+  reads a column of the table, Postgres also checks the **new** row against
+  the SELECT policy ([CREATE POLICY](https://www.postgresql.org/docs/current/sql-createpolicy.html),
+  "Policies Applied by Command Type"). `is_org_member(orgB)` is false for the
+  attacker, so both abort with `42501` regardless of `WITH CHECK`.
+- That second layer exists only because the statement reads the table. An
+  UPDATE whose `WHERE`, `SET` and `RETURNING` reference none of the table's
+  own columns gets no SELECT check; there `WITH CHECK` is the only wall, and
+  this suite has no test of that shape.
 
-That is why test #6 fires the move through **two** paths and expects both to
-fail — and why it passes on the baseline *and* under the broken policy. A
-single broken policy did not leak data here because tenant identity is
-enforced in more than one place. Apply it yourself (instructions are in the
-file header) and watch the suite stay green under a policy that looks broken.
+Test #6 fires the move through **two** paths and expects both to fail. On
+the baseline either policy stops them; under the broken policy the SELECT
+check alone still does, which is why the test stays green in both cases. In
+those two paths a single broken policy did not leak data, because tenant
+identity is enforced in more than one place. Apply it yourself (instructions
+are in the file header) and watch the suite stay green under a policy that
+looks broken.
 
 ## CI
 

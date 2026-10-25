@@ -65,8 +65,9 @@ create policy "memberships_select_own"
   using (user_id = (select auth.uid()));
 
 -- projects: full CRUD for members of the owning org.
--- WITH CHECK on write policies is what stops a member from MOVING a row into
--- a tenant they don't belong to (update ... set org_id = <someone else's org>).
+-- WITH CHECK on write policies is the check designed to stop a member from
+-- MOVING a row into a tenant they don't belong to
+-- (update ... set org_id = <someone else's org>); see move_project below.
 create policy "projects_select_member"
   on public.projects for select to authenticated
   using (public.is_org_member(org_id));
@@ -105,12 +106,15 @@ as $$
   select * from public.projects where org_id = p_org_id;
 $$;
 
--- A WRITING invoker RPC, on purpose. It does no access check of its own and
--- relies entirely on the UPDATE policy's WITH CHECK. That reliance is exactly
--- what the suite has to prove: PostgREST's own RETURNING behavior happens to
--- abort a cross-tenant move on a plain PATCH (the new row must be visible
--- through a SELECT policy), but nothing protects a write made INSIDE a
--- function body -- there, WITH CHECK is the only wall.
+-- A WRITING invoker RPC, on purpose. It does no access check of its own, so
+-- the policies on projects are what stop a cross-tenant move. Two of them
+-- apply: the UPDATE policy's WITH CHECK and, because the WHERE clause reads a
+-- column of projects, the SELECT policy, which Postgres also checks against
+-- the NEW row (CREATE POLICY docs, "Policies Applied by Command Type"). Either
+-- one aborts the move with 42501, which is why the case study in
+-- footguns/case-study/ leaves the suite green. An UPDATE whose WHERE, SET and
+-- RETURNING reference none of the table's own columns gets no SELECT check;
+-- there, WITH CHECK is the only wall.
 create or replace function public.move_project(p_project_id uuid, p_org_id uuid)
 returns void
 language sql

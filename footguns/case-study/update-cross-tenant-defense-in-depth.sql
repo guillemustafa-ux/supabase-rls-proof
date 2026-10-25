@@ -8,17 +8,22 @@
 --     with check (created_by = (select auth.uid()))    -- new row: ALSO passes (!)
 --
 -- What makes it a *case study* rather than a matrix footgun: with this hole
--- applied, the suite still stays GREEN, because the cross-tenant move is
--- blocked by a SECOND layer the broken policy never touches:
+-- applied, the suite still stays GREEN, because the cross-tenant moves it
+-- tests are blocked by a SECOND layer the broken policy never touches:
 --
---   1. PATCH via PostgREST -- the internal RETURNING requires the NEW row to be
---      visible through a SELECT policy. is_org_member(orgB) is false for the
---      attacker, so the statement aborts with 42501 regardless of WITH CHECK.
---   2. A SECURITY INVOKER RPC that writes inside its body (public.move_project)
---      -- still blocked in practice on this stack.
+--   Both test paths (a PATCH through PostgREST and the SECURITY INVOKER RPC
+--   public.move_project) run an UPDATE whose WHERE reads projects.id. When an
+--   UPDATE reads the table, Postgres also checks the NEW row against the
+--   SELECT policy (CREATE POLICY docs, "Policies Applied by Command Type").
+--   is_org_member(orgB) is false for the attacker, so both abort with 42501
+--   regardless of WITH CHECK. An UPDATE whose WHERE, SET and RETURNING
+--   reference none of the table's own columns gets no such check, and the
+--   broken WITH CHECK alone would decide it; the suite has no test of that
+--   shape.
 --
 -- The lesson for a client reading this repo: a single broken policy did NOT
--- open a hole here, because tenant identity is enforced in more than one place.
+-- open a hole in the two paths the suite tests, because tenant identity is
+-- enforced in more than one place.
 -- That is the point of `move_project` and the two-pronged move test in
 -- tests/tenant-isolation.test.ts -- they PASS on the baseline AND with this
 -- policy applied, which is exactly what "defense in depth" looks like when you
