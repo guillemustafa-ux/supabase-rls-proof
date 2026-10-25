@@ -141,19 +141,23 @@ describe('tenant isolation', () => {
         JSON.stringify({ sub: alice.id, role: 'authenticated' }),
         alice.id,
       ]);
-      // Precondition that keeps footgun 05 detectable: the rows alice can see
+      // Precondition that keeps footgun 05 detectable: every row alice can see
       // (the SELECT policy uses the same is_org_member(org_id) predicate as the
-      // UPDATE policy's USING) are exactly her own, so an ownership-only WITH
-      // CHECK would let every one of them through.
-      const { rows: visible } = await db.query('select id, created_by from public.projects order by id');
-      expect(visible, 'precondition: alice must see exactly her own project').toEqual([
-        { id: projectA, created_by: alice.id },
-      ]);
-      const errorCode = await db.query('update public.projects set org_id = $1', [orgB]).then(
-        () => null,
-        (e: { code?: string }) => e.code,
+      // UPDATE policy's USING) is her own, so an ownership-only WITH CHECK
+      // would let every one of them through.
+      const { rows: visible } = await db.query<{ id: string; created_by: string | null }>(
+        'select id, created_by from public.projects',
       );
-      expect(errorCode, 'policy leak: the no-column UPDATE was not refused').toBe('42501');
+      expect(visible.map((r) => r.id), 'precondition: alice must see her project').toContain(projectA);
+      expect(visible.every((r) => r.created_by === alice.id), 'precondition: every row alice sees must be hers').toBe(true);
+      const refusal = await db.query('update public.projects set org_id = $1', [orgB]).then(
+        () => null,
+        (e: { code?: string; message?: string }) => e,
+      );
+      expect(refusal, 'policy leak: the no-column UPDATE was not refused').not.toBeNull();
+      expect(refusal!.code).toBe('42501');
+      // 42501 also covers a missing grant; the message pins the refusal to RLS.
+      expect(refusal!.message).toMatch(/row-level security/);
     } finally {
       // Roll back no matter what, without hiding the assertion that failed.
       await db.query('rollback').catch(() => undefined);
